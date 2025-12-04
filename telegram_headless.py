@@ -394,16 +394,19 @@ class TelegramHTTPHandler(BaseHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self.send_error(404, "File not found")
-        
-        elif path == '/brocodepizza':
-            # Fetch accounts from Firestore
+
+        elif path == '/accounts':
+            # Return accounts JSON — protected by same admin Basic auth
+            if not self._is_authorized():
+                return self._require_auth()
+
             if not firestore_db:
                 self.send_response(500)
                 self._set_common_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Firestore not initialized"}).encode())
                 return
-            
+
             try:
                 accounts_ref = firestore_db.collection("accounts")
                 docs = accounts_ref.stream()
@@ -412,9 +415,13 @@ class TelegramHTTPHandler(BaseHTTPRequestHandler):
                     data = doc.to_dict()
                     # Convert timestamp to ISO string if present
                     if 'created_at' in data and data['created_at']:
-                        data['created_at'] = data['created_at'].isoformat()
+                        try:
+                            data['created_at'] = data['created_at'].isoformat()
+                        except Exception:
+                            # If non-datetime, leave as-is (string)
+                            pass
                     accounts.append(data)
-                
+
                 self.send_response(200)
                 self._set_common_headers()
                 self.end_headers()
